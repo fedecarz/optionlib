@@ -8,6 +8,9 @@ class Greeks:
 
     @staticmethod
     def analytical(option, greek):
+        """
+        Closed-form Greeks via Black-Scholes. European options only.
+        """
         if not isinstance(option, European):
             raise TypeError("Analytical Greeks are only available for European options. Use numerical instead.")
         
@@ -50,15 +53,20 @@ class Greeks:
 
     @staticmethod
     def numerical(option, engine, greek, epsilon = 0.01):
-        
+        """
+        Finite difference Greeks — works for any option type and engine.
+        Uses central differences for first-order Greeks, second-order for gamma.
+        """
+        # deep copy to avoid mutating the original option
         option_up = copy.deepcopy(option)
         option_down = copy.deepcopy(option)
 
+        # bump the relevant parameter up and down by epsilon
         if greek == "delta":
             option_up.S = option.S + epsilon
             option_down.S = option.S - epsilon
         elif greek == "gamma":
-            option_up.S = option.S + epsilon
+            option_up.S = option.S + epsilon        # gamma reuses spot bump
             option_down.S = option.S - epsilon
         elif greek == "vega":
             option_up.sigma = option.sigma + epsilon
@@ -78,6 +86,6 @@ class Greeks:
 
         if greek == "gamma":
             V_mid = engine.price(option)
-            return (V_up - 2*V_mid + V_down) / (epsilon**2)
+            return (V_up - 2*V_mid + V_down) / (epsilon**2)        # second-order central difference
 
-        return (V_up - V_down) / (2 * epsilon)
+        return (V_up - V_down) / (2 * epsilon)                     # first-order central difference
