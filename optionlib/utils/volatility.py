@@ -17,24 +17,24 @@ def implied_vol(option, market_price, tol = 1e-6, max_iter = 200):
     """
     Calculates implied volatility -> backed out through Newton Raphson solver
     """
-    sigma = 0.2
-    option_copy = copy.deepcopy(option)
+    sigma = 0.2                                # initial guess
+    option_copy = copy.deepcopy(option)        # avoid mutating the original option
 
     for i in range(max_iter):
         option_copy.sigma = sigma
 
         price = Black_Scholes.price(option_copy)
-        vega = Greeks.analytical(option_copy, "vega") * 100
+        vega = Greeks.analytical(option_copy, "vega") * 100        # rescale vega back to raw units
 
-        diff = price - market_price
+        diff = price - market_price        # pricing error
 
-        if abs(diff) < tol:
+        if abs(diff) < tol:                # converged
             return sigma
 
-        if abs(vega) < 1e-10:
+        if abs(vega) < 1e-10:              # vega too small — avoid division by zero
             break
-
-        sigma = sigma - diff / vega
-        sigma = max(0.001, min(sigma, 10.0))
+    
+        sigma = sigma - diff / vega            # Newton-Raphson step
+        sigma = max(0.001, min(sigma, 10.0))   # keep sigma in valid bounds
         
     raise ValueError("Implied vol did not converge")
