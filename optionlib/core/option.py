@@ -12,7 +12,7 @@ class Option(ABC):
         self.r = r
         self.sigma = sigma
         self.q = q
-        self.option_type = option_type.lower()
+        self.option_type = option_type.lower()    # normalise to lowercase
         self._validate()        # internal method (_)
 
     def _validate(self):
@@ -33,7 +33,7 @@ class Option(ABC):
         
 
     @abstractmethod
-    def payoff(self, S):
+    def payoff(self, S):            # each subclass defines its own payoff
         pass
 
     def price(self, engine = None, **kwargs):
@@ -42,21 +42,21 @@ class Option(ABC):
         Override with engine='bs', 'mc', 'binomial', 'trinomial'.
         """
         
-        # Default engine selection
+        # smart default: pick best engine for each option type
         if engine is None:
             if isinstance(self, European):
-                engine = "bs"
+                engine = "bs"                    # exact closed-form
             elif isinstance(self, American):
-                engine = "binomial"
+                engine = "binomial"              # early exercise via tree
             elif isinstance(self, Barrier):
-                engine = "trinomial"
+                engine = "trinomial"             # accurate barrier handling
             else:
-                engine = "mc"
+                engine = "mc"                    # path-dependent → simulation
         
         if engine == "bs":
             return Black_Scholes.price(self)
         elif engine == "binomial":
-            return Binomial.price(self, **kwargs)
+            return Binomial.price(self, **kwargs)        # kwargs: extra arguments forwarded directly to the engine
         elif engine == "trinomial":
             return Trinomial.price(self, **kwargs)
         elif engine == "mc":
