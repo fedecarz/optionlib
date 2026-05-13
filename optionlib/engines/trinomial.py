@@ -36,22 +36,25 @@ class Trinomial:
         tree = np.zeros((N + 1, 2*N + 1))
 
         # Forward pass
-        for J in range(N + 1):
+        for J in range(2*N + 1):
             S_T = S * u**(J - N)
             tree[N, J] = option.payoff(S_T)
 
         # Roll backwards
         for i in range(N - 1, -1, -1):
-            for j in range(2*i + 1):
+            for j in range(N - i, N + i + 1):
                 tree[i, j] = np.exp(-r * dt) * (
-                    pu * tree[i+1, j+2] + 
-                    pm * tree[i+1, j+1] +
-                    pd * tree[i+1, j])
+                    pu * tree[i+1, j+1] + 
+                    pm * tree[i+1, j] +
+                    pd * tree[i+1, j-1]
+                )
+                
+                S_ij = S * u**(j - N)
+                
                 if isinstance(option, American):
-                    S_ij = S * u**(j - i)
                     tree[i, j] = max(tree[i, j], option.payoff(S_ij))
+                    
                 if isinstance(option, Barrier):
-                    S_ij = S * u**(j - i)
                     if "out" in option.barrier_type:
                         if "up" in option.barrier_type and S_ij >= option.barrier:
                             tree[i, j] = 0
@@ -63,7 +66,7 @@ class Trinomial:
                         elif "down" in option.barrier_type and S_ij > option.barrier:
                             tree[i, j] = 0
 
-        return tree[0, 0]
+        return tree[0, N]
 
 
         
