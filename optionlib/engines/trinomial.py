@@ -24,10 +24,10 @@ class Trinomial:
 
         # Computing the parameters
         dt = T / N
-        lam = np.sqrt(3/2)      # lambda parameter
-        u = np.exp(lam * sigma * np.sqrt(dt))
-        d = 1 / u
-        m = 1       # Middle, no move
+        lam = np.sqrt(3/2)                                                                  # lambda: controls branching width
+        u = np.exp(lam * sigma * np.sqrt(dt))                                               # up factor
+        d = 1 / u                                                                           # down factor
+        m = 1                                                                               # Middle, no move
         pu = 1/(2*lam**2) + (r - q - 0.5 * sigma ** 2) * np.sqrt(dt) / (2*lam*sigma)        # up probability
         pd = 1/(2*lam**2) - (r - q - 0.5 * sigma ** 2) * np.sqrt(dt) / (2*lam*sigma)        # down probability
         pm = 1 - 1/lam**2                                                                   # middle probability
@@ -37,36 +37,34 @@ class Trinomial:
 
         # Forward pass
         for J in range(2*N + 1):
-            S_T = S * u**(J - N)
+            S_T = S * u**(J - N)                # spot at terminal node J (offset from center)
             tree[N, J] = option.payoff(S_T)
 
         # Roll backwards
         for i in range(N - 1, -1, -1):
-            for j in range(N - i, N + i + 1):
+            for j in range(N - i, N + i + 1):        # reachable nodes at step i form a cone
+                # discounted expected value under risk-neutral measure
                 tree[i, j] = np.exp(-r * dt) * (
                     pu * tree[i+1, j+1] + 
                     pm * tree[i+1, j] +
                     pd * tree[i+1, j-1]
                 )
                 
-                S_ij = S * u**(j - N)
+                S_ij = S * u**(j - N)                # spot at node (i, j): offset from center column N
                 
                 if isinstance(option, American):
-                    tree[i, j] = max(tree[i, j], option.payoff(S_ij))
+                    tree[i, j] = max(tree[i, j], option.payoff(S_ij))        # early exercise check
                     
                 if isinstance(option, Barrier):
-                    if "out" in option.barrier_type:
+                    if "out" in option.barrier_type:                         # knock-out: zero if breached
                         if "up" in option.barrier_type and S_ij >= option.barrier:
                             tree[i, j] = 0
                         elif "down" in option.barrier_type and S_ij <= option.barrier:
                             tree[i, j] = 0
-                    elif "in" in option.barrier_type:
+                    elif "in" in option.barrier_type:                        # knock-in: zero unless breached
                         if "up" in option.barrier_type and S_ij < option.barrier:
                             tree[i, j] = 0
                         elif "down" in option.barrier_type and S_ij > option.barrier:
                             tree[i, j] = 0
 
-        return tree[0, N]
-
-
-        
+        return tree[0, N]        # root at center column N
