@@ -195,10 +195,12 @@ class MonteCarlo:
         r = option.r
         sigmas = option.sigmas
         q = option.q
+        rho = option.rho
 
         N = len(spots)
         dt = T / steps
-        L = np.linalg.cholesky(option.rho)
+        corr_matrix = np.array([[1, rho], [rho, 1]])
+        L = np.linalg.cholesky(corr_matrix)
         Z = np.random.normal(0,1,(M,steps,N))
         Z_correlated = Z @ L.T
         S_paths = np.zeros((N, M, steps))
