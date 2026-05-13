@@ -26,32 +26,36 @@ class Binomial:
         sigma = option.sigma
         q = option.q
 
-        # Computing the parameters
-        dt = T / N
-        u = np.exp(sigma * np.sqrt(dt))
-        d = 1 / u
-        p = (np.exp((r-q) * dt) - d) / (u - d)
+        # Computing tree parameters
+        dt = T / N                                # length of each time step
+        u = np.exp(sigma * np.sqrt(dt))           # up factor
+        d = 1 / u                                 # down factor (symmetric)
+        p = (np.exp((r-q) * dt) - d) / (u - d)    # risk-neutral up probability
 
         # Creating a empty tree
         tree = np.zeros((N + 1, N + 1))
 
+        # Forward pass: fill terminal payoffs
         for J in range(N + 1):
-            S_T = S * u**J * d**(N - J)
+            S_T = S * u**J * d**(N - J)        # terminal spot at node J
             tree[N, J] = option.payoff(S_T)
 
-        # Roll backwards
+        # Roll backwards: roll present value back to t=0
         for i in range(N - 1, -1, -1):
             for j in range(i + 1):
+                # discounted expected value under risk-neutral measure
                 tree[i, j] = np.exp(-r * dt) * (p * tree[i+1, j+1] + (1-p) * tree[i+1, j])
+                
                 if isinstance(option, American):
-                    S_ij = S * u**j * d**(i - j)
-                    tree[i, j] = max(tree[i, j], option.payoff(S_ij))
+                    S_ij = S * u**j * d**(i - j)        # spot at node (i, j)
+                    tree[i, j] = max(tree[i, j], option.payoff(S_ij))    # early exercise check
+                    
                 if isinstance(option, Barrier):
                     S_ij = S * u**j * d**(i - j)
-                    if "out" in option.barrier_type:
+                    if "out" in option.barrier_type:    # knock-out: zero if breached
                         if "up" in option.barrier_type and S_ij >= option.barrier:
                             tree[i, j] = 0
                         elif "down" in option.barrier_type and S_ij <= option.barrier:
                             tree[i, j] = 0
 
-        return tree[0, 0]
+        return tree[0, 0]                                # root = option price today
