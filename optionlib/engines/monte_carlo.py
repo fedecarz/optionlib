@@ -47,14 +47,14 @@ class MonteCarlo:
 
         # Simulate paths (vectorization)
         dt = T / steps
-        Z = np.random.normal(0, 1, (M, steps))
-        drift = (r - q - 0.5*sigma**2) * dt     # GBM decomposition
+        Z = np.random.normal(0, 1, (M, steps))    # standard normal shocks
+        drift = (r - q - 0.5*sigma**2) * dt       # GBM decomposition
         diffusion = sigma * np.sqrt(dt) * Z
         S_paths = S * np.exp(np.cumsum(drift + diffusion, axis=1))
 
-        S_final = S_paths[:, -1]
+        S_final = S_paths[:, -1]                      # terminal prices across all paths
         payoffs = np.array([option.payoff(s) for s in S_final])
-        price = np.exp(-r * T) * np.mean(payoffs)
+        price = np.exp(-r * T) * np.mean(payoffs)     # discounted average payoff
 
         return price
 
@@ -76,9 +76,9 @@ class MonteCarlo:
         payoffs = []
         for path in S_paths:
             if option.averaging == "arithmetic":
-                S_avg = np.mean(path)
+                S_avg = np.mean(path)                    # arithmetic mean of path
             else:
-                S_avg = np.exp(np.mean(np.log(path)))
+                S_avg = np.exp(np.mean(np.log(path)))    # geometric mean via log-average
             payoffs.append(option.payoff(S_avg))
 
         price = np.exp(-r * T) * np.mean(payoffs)
@@ -110,7 +110,7 @@ class MonteCarlo:
             else:
                 breached = any(path <= option.barrier)
 
-            # check if alive
+            # knock-out: dies on breach / knock-in: activates on breach
             if "out" in option.barrier_type:
                 alive = not breached
             else:
@@ -142,8 +142,7 @@ class MonteCarlo:
 
         payoffs = []
         for path in S_paths:
-            payoff = option.payoff(path)
-            payoffs.append(payoff)
+            payoffs.append(option.payoff(path))        # payoff uses full path (max/min)
 
         price = np.exp(-r * T) * np.mean(payoffs)
         return price
@@ -163,9 +162,11 @@ class MonteCarlo:
         q = option.q
 
         dt = T / steps
+
+        # Correlated shocks via Cholesky-like decomposition
         Z1 = np.random.normal(0,1,(M,steps))
         Z2 = np.random.normal(0,1,(M,steps))
-        Z2 = option.rho * Z1 + np.sqrt(1 - option.rho**2) * Z2
+        Z2 = option.rho * Z1 + np.sqrt(1 - option.rho**2) * Z2        # induce correlation
 
         drift1 = (r - q - 0.5 * sigma**2) * dt
         diffusion1 = sigma * np.sqrt(dt) * Z1
@@ -199,11 +200,13 @@ class MonteCarlo:
 
         N = len(spots)
         dt = T / steps
-        corr_matrix = np.array([[1, rho], [rho, 1]])
-        L = np.linalg.cholesky(corr_matrix)
+
+        # Cholesky decomposition to correlate asset paths
+        corr_matrix = np.array([[1, rho], [rho, 1]])        # 2x2 correlation matrix
+        L = np.linalg.cholesky(corr_matrix)                 # lower triangular factor
         Z = np.random.normal(0,1,(M,steps,N))
         Z_correlated = Z @ L.T
-        S_paths = np.zeros((N, M, steps))
+        S_paths = np.zeros((N, M, steps))                   # apply correlation structure
 
         # loop over each asset i
         for i in range(N):
@@ -213,7 +216,7 @@ class MonteCarlo:
 
         payoffs = []
         for m in range(M):
-            finals = [S_paths[i][m, -1] for i in range(N)]
+            finals = [S_paths[i][m, -1] for i in range(N)]   # terminal price per asset
             payoffs.append(option.payoff(finals))
         
         price = np.exp(-r * T) * np.mean(payoffs)
