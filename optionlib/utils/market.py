@@ -16,7 +16,7 @@ def get_historical_prices(ticker: str, period="1y"):
 
 def get_risk_free_rate():
     rf = yf.Ticker("^IRX").fast_info["lastPrice"]
-    return rf / 100
+    return rf / 100        # convert from % to decimal
 
 def from_market(ticker: str, K, expiry, option_type = "call", option_class = "european", period = "1y"):
     """
@@ -41,11 +41,11 @@ def from_market(ticker: str, K, expiry, option_type = "call", option_class = "eu
     # Compute T
     if isinstance(expiry, str):
         expiry_date = date.fromisoformat(expiry)
-        T = (expiry_date - date.today()).days / 365
+        T = (expiry_date - date.today()).days / 365        # convert calendar days to years
         if T <= 0:
             raise ValueError(f"Expiry date {expiry} is in the past.")
     else:
-        T = float (expiry)
+        T = float (expiry)        # already in years
 
     # Compute historical vol
     prices = get_historical_prices(ticker, period=period)
