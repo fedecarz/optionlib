@@ -35,3 +35,72 @@ class Option(ABC):
     @abstractmethod
     def payoff(self, S):
         pass
+
+    def price(self, engine = None, **kwargs):
+        """
+        Price the option using the most appropriate engine by default.
+        Override with engine='bs', 'mc', 'binomial', 'trinomial'.
+        """
+        
+        # Default engine selection
+        if engine is None:
+            if isinstance(self, European):
+                engine = "bs"
+            elif isinstance(self, American):
+                engine = "binomial"
+            elif isinstance(self, Barrier):
+                engine = "trinomial"
+            else:
+                engine = "mc"
+        
+        if engine == "bs":
+            return Black_Scholes.price(self)
+        elif engine == "binomial":
+            return Binomial.price(self, **kwargs)
+        elif engine == "trinomial":
+            return Trinomial.price(self, **kwargs)
+        elif engine == "mc":
+            return MonteCarlo.price(self, **kwargs)
+        else:
+            raise ValueError(f"Unknown engine: '{engine}'. Use 'bs', 'mc', 'binomial', or 'trinomial'.")
+        
+    def greeks(self, method = "analytical", engine = None, epsilon = 0.01):
+        """
+        Returns all Greeks as a dictionary.
+        Analytical only available for European options.
+        """
+
+        greek_names = ["delta", "gamma", "vega", "theta", "rho"]
+
+        if method == "analytical":
+            if not isinstance(self, European):
+                raise TypeError("Analytical Greeks only available for European options. Use method='numerical'.")
+            return {g: Greeks.analytical(self, g) for g in greek_names}
+
+        elif method == "numerical":
+            if engine is None:
+                if isinstance(self, European):
+                    _engine = Black_Scholes
+                elif isinstance(self, American):
+                    _engine = Binomial
+                elif isinstance(self, Barrier):
+                    _engine = Trinomial
+                else:
+                    _engine = MonteCarlo
+            else:
+                _engine = {"bs": Black_Scholes, "binomial": Binomial,
+                        "trinomial": Trinomial, "mc": MonteCarlo}[engine]
+
+            return {g: Greeks.numerical(self, _engine, g, epsilon=epsilon) for g in greek_names}
+
+        else:
+            raise ValueError("method must be 'analytical' or 'numerical'.")
+        
+# Deferred imports to avoid circular dependecies
+from optionlib.utils.greeks import Greeks
+from optionlib.core.vanilla import European, American
+from optionlib.core.barrier import Barrier
+from optionlib.engines.black_scholes import Black_Scholes
+from optionlib.engines.monte_carlo import MonteCarlo
+from optionlib.engines.binomial import Binomial
+from optionlib.engines.trinomial import Trinomial
