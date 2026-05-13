@@ -13,7 +13,7 @@ def historical_volatility(prices: pd.DataFrame):
     return ann_vol
 
 
-def implied_vol(option, market_price, tol = 1e-6, max_iter = 100):
+def implied_vol(option, market_price, tol = 1e-6, max_iter = 200):
     """
     Calculates implied volatility -> backed out through Newton Raphson solver
     """
@@ -24,15 +24,17 @@ def implied_vol(option, market_price, tol = 1e-6, max_iter = 100):
         option_copy.sigma = sigma
 
         price = Black_Scholes.price(option_copy)
-        vega = Greeks.analytical(option_copy, "vega")
+        vega = Greeks.analytical(option_copy, "vega") * 100
 
         diff = price - market_price
 
         if abs(diff) < tol:
             return sigma
 
+        if abs(vega) < 1e-10:
+            break
+
         sigma = sigma - diff / vega
-
+        sigma = max(0.001, min(sigma, 10.0))
+        
     raise ValueError("Implied vol did not converge")
-   
-
