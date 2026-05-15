@@ -1,18 +1,19 @@
 # optionlib
 
-**An open-source Python library for pricing vanilla and exotic options — Black-Scholes, Monte Carlo, Binomial and Trinomial trees.**
+**An open-source Python library for pricing vanilla and exotic options — Black-Scholes, Monte Carlo, Binomial, Trinomial trees, and a Machine Learning engine for European options.**
 
-*Personal project — built to implement and understand the core pricing methods used in quantitative finance.*
+*Personal project — built to implement and understand the core pricing methods used in quantitative finance, including a neural network pricer trained on synthetic data.*
 
 ---
 
 ## Overview
 
-optionlib provides a complete options pricing framework in pure Python:
+optionlib provides a complete options pricing framework in Python:
 
 - price European and American options using closed-form Black-Scholes and tree methods
 - price path-dependent exotics (Asian, Barrier, Lookback) using Monte Carlo simulation
 - price multi-asset exotics (Spread, Rainbow) with correlated GBM paths
+- price European options using a trained neural network (ML engine)
 - compute Greeks analytically (Black-Scholes) or numerically via finite differences
 - solve for implied volatility using Newton-Raphson inversion
 - generate synthetic GBM price paths for testing and visualisation
@@ -20,7 +21,7 @@ optionlib provides a complete options pricing framework in pure Python:
 
 The main demonstration lives in:
 
-- `notebooks/demo.ipynb` — end-to-end walkthrough of all option types and pricing engines
+- `notebooks/demo.ipynb` — end-to-end walkthrough of all option types, pricing engines, and ML sensitivity analysis
 
 ---
 
@@ -46,6 +47,7 @@ The main demonstration lives in:
 | Binomial Tree | ✅ | ✅ | ❌ | ⚠️ knock-out only | ❌ | ❌ | ❌ |
 | Trinomial Tree | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Monte Carlo | ✅ | ⚠️ approx | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ML (Neural Net) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 ⚠️ approximate — works but with known limitations (see docs)
 
@@ -57,11 +59,16 @@ The main demonstration lives in:
 from optionlib import European, American, Asian, Barrier
 from optionlib import Black_Scholes, MonteCarlo, Binomial, Trinomial
 from optionlib import Greeks
+from optionlib import MLPricer
 
 # price a European call with Black-Scholes
 opt = European(S=100, K=100, T=1, r=0.05, sigma=0.2, option_type="call")
 price = Black_Scholes.price(opt)
 print(f"BS Price: {price:.4f}")
+
+# price the same option with the ML engine
+price_ml = MLPricer.price(opt)
+print(f"ML Price: {price_ml:.4f}")
 
 # price the same option with Monte Carlo
 price_mc = MonteCarlo.price(opt, M=50000)
@@ -76,11 +83,21 @@ print(f"American Put: {price_tree:.4f}")
 delta = Greeks.analytical(opt, "delta")
 vega  = Greeks.analytical(opt, "vega")
 print(f"Delta: {delta:.4f}, Vega: {vega:.4f}")
-
-# compute Greeks numerically for any option/engine
-delta_num = Greeks.numerical(opt, MonteCarlo, "delta")
-print(f"Numerical Delta: {delta_num:.4f}")
 ```
+
+---
+
+## ML Engine
+
+The ML engine is a feedforward neural network trained on 500,000 synthetic European options priced with Black-Scholes.
+
+**Architecture:** 7 inputs → 64 → 64 → 64 → 1 output (price)  
+**Training:** Adam optimizer, MSE loss, 80/20 train/val split, feature scaling (MinMaxScaler)  
+**Accuracy:** ~$0.07 average error vs Black-Scholes on a $10 ATM option
+
+You can retrain the model from scratch in trainer.py
+
+Weights are saved automatically to `optionlib/ml/training/model_weights.pt`.
 
 ---
 
@@ -117,73 +134,42 @@ rainbow = Rainbow(spots=[100, 105, 98], K=100, T=1, r=0.05,
 
 ### engines/
 
-Four independent pricing engines. All expose a single `price(option)` static method.
+Four traditional pricing engines plus the ML engine. All expose a single `price(option)` static method.
 
 ```python
 from optionlib import Black_Scholes, MonteCarlo, Binomial, Trinomial
+from optionlib import MLPricer
 
-# Black-Scholes — European only, exact closed-form
-Black_Scholes.price(opt)
+Black_Scholes.price(opt)                    # European only, exact closed-form
+MonteCarlo.price(opt, M=100000, steps=252)  # all option types
+Binomial.price(opt, N=200)                  # European and American
+Trinomial.price(opt, N=200)                 # European, American, all barriers
+MLPricer.price(opt)                         # European only, neural network
+```
 
-# Monte Carlo — all option types, accuracy increases with M
-MonteCarlo.price(opt, M=100000, steps=252)
+### ml/
 
-# Binomial tree — European and American, knock-out barriers
-Binomial.price(opt, N=200)
-
-# Trinomial tree — European, American, all barrier types
-Trinomial.price(opt, N=200)
+```
+optionlib/ml/
+├── data_gen.py     # generate synthetic training data using Black-Scholes
+├── model.py        # neural network architecture (PyTorch)
+├── trainer.py      # training loop with validation and feature scaling
+├── pricer.py       # load weights and price any European option
+└── training/
+    ├── model_weights.pt   # saved model weights (not tracked by git)
+    └── scaler.pkl         # saved feature scaler (not tracked by git)
 ```
 
 ### utils/
 
-#### Greeks
-
 ```python
-from optionlib import Greeks
+from optionlib import Greeks, historical_volatility, implied_vol, simulate_gbm
 
-# analytical — Black-Scholes closed-form, European only, instant
-Greeks.analytical(opt, "delta")   # → 0.5398
-Greeks.analytical(opt, "gamma")   # → 0.0199
-Greeks.analytical(opt, "vega")    # → 0.3752
-Greeks.analytical(opt, "theta")   # → -0.0136
-Greeks.analytical(opt, "rho")     # → 0.4623
-
-# numerical — finite differences, any option, any engine
+Greeks.analytical(opt, "delta")
 Greeks.numerical(asian, MonteCarlo, "delta", epsilon=0.01)
-Greeks.numerical(barrier, Trinomial, "vega", epsilon=0.01)
-```
-
-#### Volatility
-
-```python
-from optionlib import historical_volatility, implied_vol
-
-# historical vol from a price series
-ann_vol = historical_volatility(prices)   # → 0.1923
-
-# implied vol — Newton-Raphson inversion of Black-Scholes
-iv = implied_vol(opt, market_price=10.50)  # → 0.2134
-```
-
-#### Simulation
-
-```python
-from optionlib import simulate_gbm
-
-# generate a single GBM path
+ann_vol = historical_volatility(prices)
+iv = implied_vol(opt, market_price=10.50)
 path = simulate_gbm(S=100, r=0.05, sigma=0.2, T=1, steps=252, seed=42)
-# returns numpy array of length 253 (including S at t=0)
-```
-
-#### Market Data (optional — requires yfinance)
-
-```python
-from optionlib.utils.market import get_spot, get_historical_prices, get_risk_free_rate
-
-spot   = get_spot("AAPL")
-prices = get_historical_prices("AAPL", period="1y")
-r      = get_risk_free_rate()
 ```
 
 ---
@@ -207,13 +193,6 @@ cd optionlib
 pip install -e .
 ```
 
-Core dependencies are installed automatically. For optional features:
-
-```bash
-pip install yfinance          # market data
-pip install torch             # ML engine (Phase 2)
-```
-
 ---
 
 ## Repository Structure
@@ -225,6 +204,7 @@ optionlib/
 │   ├── __init__.py
 │   │
 │   ├── core/
+│   │   ├── __init__.py
 │   │   ├── option.py          # abstract base class
 │   │   ├── vanilla.py         # European, American
 │   │   ├── asian.py
@@ -234,24 +214,34 @@ optionlib/
 │   │   └── rainbow.py
 │   │
 │   ├── engines/
+│   │   ├── __init__.py
 │   │   ├── black_scholes.py
 │   │   ├── monte_carlo.py
 │   │   ├── binomial.py
 │   │   └── trinomial.py
 │   │
 │   ├── utils/
+│   │   ├── __init__.py
 │   │   ├── greeks.py
 │   │   ├── volatility.py
-│   │   ├── simulation.py
-│   │   └── market.py          # yfinance wrapper (optional)
+│   │   ├── simulation.py      # GBM
+│   │   └── market.py          # yfinance wrapper
 │   │
-│   └── ml/                    # Phase 2
-│       └── __init__.py
+│   └── ml/                    
+│        ├── __init__.py
+│        ├── data_gen.py     # generate training data
+│        ├── model.py        # neural net (PyTorch)
+│        ├── trainer.py
+│        ├── pricer.py
+│        └── training/
+│           ├── model_weights.pt   # saved model weights (not tracked by git)
+│           └── scaler.pkl         # saved feature scaler (not tracked by git)
 │
-├── tests/
-│   ├── test_european.py
-│   ├── test_american.py
-│   └── test_exotics.py
+├── tests/                         
+│   ├── __init__.py
+│   ├── test_european.py         # Planned
+│   ├── test_american.py         # Planned
+│   └── test_exotics.py          # Planned
 │
 ├── notebooks/
 │   └── demo.ipynb
@@ -278,17 +268,17 @@ optionlib/
 | Implied vol solver | ✅ Done |
 | GBM simulation utility | ✅ Done |
 | yfinance market data wrapper | ✅ Done |
-| Demo notebook | 🔄 In progress |
-| ML pricing engine (neural network) | 📋 Phase 2 |
+| ML pricing engine (neural network) | ✅ Done |
+| Demo notebook | ✅ Done |
 | Tests | 📋 Planned |
 
 ---
 
 ## Requirements
 
-Python 3.8+ · numpy · scipy · pandas
+Python 3.8+ · numpy · scipy · pandas · torch · scikit-learn · joblib
 
-Optional: yfinance · torch · scikit-learn · matplotlib · jupyter
+Optional: yfinance · matplotlib · jupyter
 
 ---
 
@@ -299,7 +289,7 @@ Optional: yfinance · torch · scikit-learn · matplotlib · jupyter
 | American MC | Ignores early exercise | Longstaff-Schwartz algorithm |
 | Binomial barriers | Knock-out only, slippage error | Node alignment, trinomial preferred |
 | Volatility surface | Flat vol per option | Vol surface interpolation (SVI, SABR) |
-| ML engine | Not yet built | Neural net trained on BS/MC prices |
+| ML engine | European only | Train on all option types |
 | Greeks for exotics | Numerical only | AAD (Adjoint Algorithmic Differentiation) |
 
 ---
